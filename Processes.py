@@ -1,7 +1,11 @@
 import psutil
 import tkinter as tk
 
+# Global variable to store all processes
+all_processes = []
+
 def list_all_processes():
+    global all_processes
     all_processes = []
     # Iterate over all running processes
     for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent']):
@@ -38,15 +42,22 @@ def display_processes(processes):
         else:
             text.insert(tk.END, line + "\n")
 
-def expand_process(proc_info):
-    # Clear previous output
-    text.delete(1.0, tk.END)
-    # Display process information
-    text.insert(tk.END, f"PID: {proc_info['pid']}, Name: {proc_info['name']}, Username: {proc_info['username']}, CPU %: {proc_info['cpu_percent']}, Memory %: {proc_info['memory_percent']}\n")
-    # Display child processes
-    if 'children' in proc_info:
-        for child_proc in proc_info['children']:
-            text.insert(tk.END, f"  Child PID: {child_proc['pid']}, Name: {child_proc['name']}\n")
+def expand_process(event):
+    global all_processes
+    index = text.index(tk.CURRENT)
+    line = text.get(index + " linestart", index + " lineend")
+    pid = int(line.split("PID: ")[1].split(",")[0])
+    for proc in all_processes:
+        if proc['pid'] == pid and 'children' in proc:
+            # Clear previous output
+            text.delete(1.0, tk.END)
+            # Display process information
+            text.insert(tk.END, f"PID: {proc['pid']}, Name: {proc['name']}, Username: {proc['username']}, CPU %: {proc['cpu_percent']}, Memory %: {proc['memory_percent']}\n")
+            # Display child processes
+            text.insert(tk.END, "\nChild Processes:\n")
+            for child_proc in proc['children']:
+                text.insert(tk.END, f"  Child PID: {child_proc.pid}, Name: {child_proc.name()}\n")
+            break
 
 def return_to_processes_list():
     # Display all processes again
@@ -56,15 +67,6 @@ def search_and_display():
     search_term = search_entry.get()
     search_results = search_processes(search_term)
     display_processes(search_results)
-
-def process_clicked(event):
-    index = text.index(tk.CURRENT)
-    line = text.get(index + " linestart", index + " lineend")
-    pid = int(line.split("PID: ")[1].split(",")[0])
-    for proc in all_processes:
-        if proc['pid'] == pid:
-            expand_process(proc)
-            break
 
 # Create main application window
 root = tk.Tk()
@@ -89,8 +91,8 @@ text.pack()
 # Add a tag for highlighting
 text.tag_configure("highlight", background="yellow")
 
-# Bind click event to process_clicked function
-text.bind("<Button-1>", process_clicked)
+# Bind click event to expand_process function
+text.bind("<Button-1>", expand_process)
 
 # Create a "Return" button to go back to the list of all processes
 return_button = tk.Button(root, text="Return to Processes List", command=return_to_processes_list)
