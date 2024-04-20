@@ -223,5 +223,64 @@ return_button.pack()
 # Bind event to list all processes when Processes tab is selected
 notebook.bind("<<NotebookTabChanged>>", on_processes_tab_selected)
 
+import subprocess
+import re
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+# Function to export ipconfig displaydns
+def export_ipconfig_displaydns(output_file):
+    result = subprocess.run(['ipconfig', '/displaydns'], capture_output=True, text=True)
+    with open(output_file, 'w') as file:
+        file.write(result.stdout)
+
+# Function to check for Suspicious domains
+def check_for_legitimate_domains(output_file, legitimate_domains_file):
+    with open(legitimate_domains_file, 'r') as file:
+        legitimate_domains = [line.strip() for line in file]
+
+    with open(output_file, 'r') as file:
+        output = file.read()
+
+    matches = []
+    for domain in legitimate_domains:
+        if re.search(domain, output):
+            matches.append(domain)
+
+    return matches
+
+# Create DNS tab
+dns_tab = ttk.Frame(notebook)
+notebook.add(dns_tab, text="DNS")
+
+# Create widgets for DNS tab
+output_file = 'dns_output.txt'
+legitimate_domains_file = 'Domains_List.txt'
+export_button = ttk.Button(dns_tab, text="Export DNS Data", command=lambda: export_ipconfig_displaydns(output_file))
+export_button.pack(pady=10)
+
+check_button = ttk.Button(dns_tab, text="Check for Suspicious Domains", command=lambda: check_domains())
+check_button.pack(pady=10)
+
+result_label = ttk.Label(dns_tab, text="")
+result_label.pack(pady=10)
+
+# Function to check domains
+def check_domains():
+    try:
+        matches = check_for_legitimate_domains(output_file, legitimate_domains_file)
+        if matches:
+            result_label.config(text="Found matches to suspicious domains:\n" + "\n".join(matches))
+        else:
+            result_label.config(text="No matches found.")
+    except Exception as e:
+        result_label.config(text="An error occurred: " + str(e))
+
+# Bind event to update DNS data when DNS tab is selected
+def on_dns_tab_selected(event):
+    result_label.config(text="")
+
+notebook.bind("<<NotebookTabChanged>>", on_dns_tab_selected)
+
 # Run the application
 root.mainloop()
