@@ -1,18 +1,12 @@
 import psutil
 import tkinter as tk
-
-# Global variable to store all processes
-all_processes = []
+import socket
 
 def list_all_processes():
-    global all_processes
     all_processes = []
-    # Iterate over all running processes
-    for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent']):
+    for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent', 'connections']):
         try:
-            # Get process information
             proc_info = proc.info
-            # Check if the process has children
             children = list(proc.children())
             if children:
                 proc_info['children'] = children
@@ -21,21 +15,39 @@ def list_all_processes():
             pass
     return all_processes
 
+def get_network_info():
+    network_info = {}
+    for proc in psutil.process_iter(['pid', 'connections']):
+        try:
+            proc_info = proc.info
+            connections = proc_info.get('connections', [])
+            for conn in connections:
+                if hasattr(conn, 'status') and hasattr(conn, 'family') and conn.family == socket.AF_INET:
+                    remote_ip = conn.raddr[0] if hasattr(conn, 'raddr') and len(conn.raddr) > 0 else None
+                    if remote_ip:
+                        try:
+                            remote_host = socket.gethostbyaddr(remote_ip)[0]
+                        except socket.herror:
+                            remote_host = remote_ip
+                        network_info[proc_info['pid']] = remote_host
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+    return network_info
+
 def search_processes(search_term):
     all_processes = list_all_processes()
     search_results = []
-    # Search for processes matching the search term
     for proc in all_processes:
         if search_term.lower() in proc['name'].lower():
             search_results.append(proc)
     return search_results
 
-def display_processes(processes):
-    # Clear previous output
+def display_processes(processes, network_info):
     text.delete(1.0, tk.END)
-    # Display processes in the text widget
     for proc in processes:
         line = f"PID: {proc['pid']}, Name: {proc['name']}, Username: {proc['username']}, CPU %: {proc['cpu_percent']}, Memory %: {proc['memory_percent']}"
+        if proc['pid'] in network_info:
+            line += f", Network: {network_info[proc['pid']]}"
         if 'children' in proc:
             line += " (click to expand)"
             text.insert(tk.END, line + "\n", "highlight")
@@ -43,30 +55,25 @@ def display_processes(processes):
             text.insert(tk.END, line + "\n")
 
 def expand_process(event):
-    global all_processes
     index = text.index(tk.CURRENT)
     line = text.get(index + " linestart", index + " lineend")
     pid = int(line.split("PID: ")[1].split(",")[0])
     for proc in all_processes:
         if proc['pid'] == pid and 'children' in proc:
-            # Clear previous output
             text.delete(1.0, tk.END)
-            # Display process information
             text.insert(tk.END, f"PID: {proc['pid']}, Name: {proc['name']}, Username: {proc['username']}, CPU %: {proc['cpu_percent']}, Memory %: {proc['memory_percent']}\n")
-            # Display child processes
             text.insert(tk.END, "\nChild Processes:\n")
             for child_proc in proc['children']:
                 text.insert(tk.END, f"  Child PID: {child_proc.pid}, Name: {child_proc.name()}\n")
             break
 
 def return_to_processes_list():
-    # Display all processes again
-    display_processes(all_processes)
+    display_processes(all_processes, network_info)
 
 def search_and_display():
     search_term = search_entry.get()
     search_results = search_processes(search_term)
-    display_processes(search_results)
+    display_processes(search_results, network_info)
 
 # Create main application window
 root = tk.Tk()
@@ -100,7 +107,8 @@ return_button.pack()
 
 # Display all processes initially
 all_processes = list_all_processes()
-display_processes(all_processes)
+network_info = get_network_info()
+display_processes(all_processes, network_info)
 
 # Run the application
 root.mainloop()
